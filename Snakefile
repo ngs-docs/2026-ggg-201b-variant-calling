@@ -1,55 +1,64 @@
+SAMPLES = ["SRR2584857_1"]
+GENOME = ["ecoli-rel606"]
+
+rule make_vcf:
+    input:
+        expand("outputs/{sample}.x.{genome}.vcf",
+               sample=SAMPLES, genome=GENOME),
+
 rule uncompress_genome:
-    input: "ecoli-rel606.fa.gz"
-    output: "outputs/ecoli-rel606.fa"
+    input: "{xyz}.fa.gz"
+    output: "outputs/{xyz}.fa"
     shell: """
-        gunzip -c ecoli-rel606.fa.gz > outputs/ecoli-rel606.fa
+        gunzip -c {input} > {output}
     """
 
 rule map_reads:
-    input: "outputs/ecoli-rel606.fa", "SRR2584857_1.fastq.gz"
-    output: "outputs/SRR2584857_1.x.ecoli-rel606.sam"
+    input:
+        genome="outputs/{genome}.fa",
+        sample="{sample}.fastq.gz",
+    output: "outputs/{sample}.x.{genome}.sam"
     conda: "mapping"
     shell: """
-        minimap2 -ax sr outputs/ecoli-rel606.fa SRR2584857_1.fastq.gz > \
-            outputs/SRR2584857_1.x.ecoli-rel606.sam
+        minimap2 -ax sr {input.genome} {input.sample} > {output}
     """
 
 rule sam_to_bam:
-    input: "outputs/SRR2584857_1.x.ecoli-rel606.sam"
-    output: "outputs/SRR2584857_1.x.ecoli-rel606.bam"
+    input: "outputs/{sample}.x.{genome}.sam"
+    output: "outputs/{sample}.x.{genome}.bam"
     conda: "mapping"
     shell: """
-        samtools view -b outputs/SRR2584857_1.x.ecoli-rel606.sam > \
-            outputs/SRR2584857_1.x.ecoli-rel606.bam
+        samtools view -b {input} > {output}
      """
 
 rule sort_bam:
-    input: "outputs/SRR2584857_1.x.ecoli-rel606.bam"
-    output: "outputs/SRR2584857_1.x.ecoli-rel606.sorted.bam"
+    input: "outputs/{sample}.x.{genome}.bam"
+    output: "outputs/{sample}.x.{genome}.sorted.bam"
     conda: "mapping"
     shell: """
-        samtools sort outputs/SRR2584857_1.x.ecoli-rel606.bam > \
-            outputs/SRR2584857_1.x.ecoli-rel606.sorted.bam
+        samtools sort {input} > {output}
     """
 
 rule index_bam:
-    input: "outputs/SRR2584857_1.x.ecoli-rel606.sorted.bam"
-    output: "outputs/SRR2584857_1.x.ecoli-rel606.sorted.bam.bai"
+    input: "outputs/{sample}.x.{genome}.sorted.bam"
+    output: "outputs/{sample}.x.{genome}.sorted.bam.bai"
     conda: "mapping"
     shell: """
-        samtools index outputs/SRR2584857_1.x.ecoli-rel606.sorted.bam
+        samtools index {input}
     """
 
 rule call_variants:
-    input: "outputs/ecoli-rel606.fa", "outputs/SRR2584857_1.x.ecoli-rel606.sorted.bam"
-    output: "outputs/SRR2584857_1.x.ecoli-rel606.pileup", "outputs/SRR2584857_1.x.ecoli-rel606.bcf", "outputs/SRR2584857_1.x.ecoli-rel606.vcf"
+    input:
+        genome="outputs/{genome}.fa",
+        bam="outputs/{sample}.x.{genome}.sorted.bam",
+        bai="outputs/{sample}.x.{genome}.sorted.bam.bai",
+    output:
+        pileup="outputs/{sample}.x.{genome}.pileup",
+        bcf="outputs/{sample}.x.{genome}.bcf",
+        vcf="outputs/{sample}.x.{genome}.vcf"
     conda: "mapping"
     shell: """
-        bcftools mpileup -Ou -f outputs/ecoli-rel606.fa \
-            outputs/SRR2584857_1.x.ecoli-rel606.sorted.bam  > \
-            outputs/SRR2584857_1.x.ecoli-rel606.pileup
-        bcftools call -mv -Ob outputs/SRR2584857_1.x.ecoli-rel606.pileup \
-            -o outputs/SRR2584857_1.x.ecoli-rel606.bcf
-        bcftools view outputs/SRR2584857_1.x.ecoli-rel606.bcf -o \
-            outputs/SRR2584857_1.x.ecoli-rel606.vcf
+        bcftools mpileup -Ou -f {input.genome} {input.bam}> {output.pileup}
+        bcftools call -mv -Ob {output.pileup} -o {output.bcf}
+        bcftools view {output.bcf} -o {output.vcf}
     """
